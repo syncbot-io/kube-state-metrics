@@ -198,8 +198,8 @@ func (b *Builder) Build() []metricsstore.MetricsWriter {
 // It returns metric stores which can be used to consume
 // the generated metrics from the stores.
 func (b *Builder) BuildStores() [][]cache.Store {
-	if b.familyGeneratorFilter == nil {
-		panic("familyGeneratorFilter should not be nil")
+	if b.allowDenyList == nil {
+		panic("allowDenyList should not be nil")
 	}
 
 	var allStores [][]cache.Store
@@ -265,7 +265,7 @@ func availableResources() []string {
 }
 
 func (b *Builder) buildConfigMapStores() []cache.Store {
-	return b.buildStoresFunc(configMapMetricFamilies(b.allowAnnotationsList["configmaps"], b.allowLabelsList["configmaps"]), &v1.ConfigMap{}, createConfigMapListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(configMapMetricFamilies, &v1.ConfigMap{}, createConfigMapListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildCronJobStores() []cache.Store {
@@ -325,7 +325,7 @@ func (b *Builder) buildPersistentVolumeStores() []cache.Store {
 }
 
 func (b *Builder) buildPodDisruptionBudgetStores() []cache.Store {
-	return b.buildStoresFunc(podDisruptionBudgetMetricFamilies(b.allowAnnotationsList["poddisruptionbudget"], b.allowLabelsList["poddisruptionbudget"]), &policy.PodDisruptionBudget{}, createPodDisruptionBudgetListWatch, b.useAPIServerCache)
+	return b.buildStoresFunc(podDisruptionBudgetMetricFamilies, &policy.PodDisruptionBudget{}, createPodDisruptionBudgetListWatch, b.useAPIServerCache)
 }
 
 func (b *Builder) buildReplicaSetStores() []cache.Store {
@@ -386,7 +386,7 @@ func (b *Builder) buildStores(
 	listWatchFunc func(kubeClient clientset.Interface, ns string, fieldSelector string) cache.ListerWatcher,
 	useAPIServerCache bool,
 ) []cache.Store {
-	metricFamilies = generator.FilterFamilyGenerators(b.familyGeneratorFilter, metricFamilies)
+	metricFamilies = generator.FilterMetricFamilies(b.allowDenyList, metricFamilies)
 	composedMetricGenFuncs := generator.ComposeMetricGenFuncs(metricFamilies)
 	familyHeaders := generator.ExtractMetricFamilyHeaders(metricFamilies)
 
@@ -425,6 +425,16 @@ func (b *Builder) startReflector(
 	instrumentedListWatch := watch.NewInstrumentedListerWatcher(listWatcher, b.listWatchMetrics, reflect.TypeOf(expectedType).String(), useAPIServerCache)
 	reflector := cache.NewReflector(sharding.NewShardedListWatch(b.shard, b.totalShards, instrumentedListWatch), expectedType, store, 0)
 	go reflector.Run(b.ctx.Done())
+}
+
+// cacheStoresToMetricStores converts []cache.Store into []*metricsstore.MetricsStore
+func cacheStoresToMetricStores(cStores []cache.Store) []*metricsstore.MetricsStore {
+	mStores := make([]*metricsstore.MetricsStore, 0, len(cStores))
+	for _, store := range cStores {
+		mStores = append(mStores, store.(*metricsstore.MetricsStore))
+	}
+
+	return mStores
 }
 
 // cacheStoresToMetricStores converts []cache.Store into []*metricsstore.MetricsStore
