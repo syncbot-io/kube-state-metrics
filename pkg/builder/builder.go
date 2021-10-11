@@ -19,8 +19,6 @@ package builder
 import (
 	"context"
 
-	generator "k8s.io/kube-state-metrics/v2/pkg/metric_generator"
-
 	"github.com/prometheus/client_golang/prometheus"
 	vpaclientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	clientset "k8s.io/client-go/kubernetes"
