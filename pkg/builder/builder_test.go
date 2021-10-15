@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Kubernetes Authors All rights reserved.
+Copyright 2019 The Kubernetes Authors All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,15 +23,14 @@ import (
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	"k8s.io/kube-state-metrics/v2/pkg/allowdenylist"
 	"k8s.io/kube-state-metrics/v2/pkg/builder"
 	generator "k8s.io/kube-state-metrics/v2/pkg/metric_generator"
 )
 
 var (
-	fakeMetricLists = [][]string{
-		{"metric0.1", "metric0.2"},
-		{"metric1.1", "metric1.2"},
-	}
+	dummyMetricList0 = []string{"metric0.1", "metric0.2"}
+	dummyMetricList1 = []string{"metric1.1", "metric1.2"}
 )
 
 // BuilderInterface and Builder are public, and designed to allow
@@ -39,24 +38,27 @@ var (
 // This test case ensures we don't break compatibility for external consumers.
 func TestBuilderWithCustomStore(t *testing.T) {
 	b := builder.NewBuilder()
-	b.WithFamilyGeneratorFilter(generator.NewCompositeFamilyGeneratorFilter())
+	b.WithAllowDenyList(&allowdenylist.AllowDenyList{})
 	b.WithEnabledResources([]string{"pods"})
 	b.WithGenerateStoresFunc(customStore)
+	stores := b.BuildStores()
 
-	var fStores []*fakeStore
-	for _, stores := range b.BuildStores() {
-		for _, store := range stores {
-			fStores = append(fStores, store.(*fakeStore))
-		}
+	store0, ok := stores[0][0].(*dummyStore)
+	if !ok {
+		t.Fatal("Couldn't cast custom metrics store")
 	}
 
-	for i, fStore := range fStores {
-		metrics := fStore.List()
-		for j, m := range metrics {
-			if !reflect.DeepEqual(m, fakeMetricLists[i][j]) {
-				t.Fatalf("Unexpected store values: want %v found %v", fakeMetricLists[i], metrics)
-			}
-		}
+	if !reflect.DeepEqual(store0.metrics, dummyMetricList0) {
+		t.Fatalf("Unexpected store values: want %v found %v", dummyMetricList0, store0.metrics)
+	}
+
+	store1, ok := stores[0][1].(*dummyStore)
+	if !ok {
+		t.Fatal("Couldn't cast custom metrics store")
+	}
+
+	if !reflect.DeepEqual(store1.metrics, dummyMetricList1) {
+		t.Fatalf("Unexpected store values: want %v found %v", dummyMetricList1, store1.metrics)
 	}
 }
 
@@ -66,58 +68,53 @@ func customStore(metricFamilies []generator.FamilyGenerator,
 	useAPIServerCache bool,
 ) []cache.Store {
 	stores := make([]cache.Store, 0, 2)
-	stores = append(stores, newFakeStore(fakeMetricLists[0]))
-	stores = append(stores, newFakeStore(fakeMetricLists[1]))
+	stores = append(stores, newDummyStor(dummyMetricList0))
+	stores = append(stores, newDummyStor(dummyMetricList1))
 	return stores
 }
 
-func newFakeStore(metrics []string) *fakeStore {
-	return &fakeStore{
+func newDummyStor(metrics []string) *dummyStore {
+	return &dummyStore{
 		metrics: metrics,
 	}
 }
 
-type fakeStore struct {
+type dummyStore struct {
 	metrics []string
 }
 
-func (s *fakeStore) Add(obj interface{}) error {
+func (s *dummyStore) Add(obj interface{}) error {
 	return nil
 }
 
-func (s *fakeStore) Update(obj interface{}) error {
+func (s *dummyStore) Update(obj interface{}) error {
 	return nil
 }
 
-func (s *fakeStore) Delete(obj interface{}) error {
+func (s *dummyStore) Delete(obj interface{}) error {
 	return nil
 }
 
-func (s *fakeStore) List() []interface{} {
-	metrics := make([]interface{}, len(s.metrics))
-	for i, m := range s.metrics {
-		metrics[i] = m
-	}
-
-	return metrics
-}
-
-func (s *fakeStore) ListKeys() []string {
+func (s *dummyStore) List() []interface{} {
 	return nil
 }
 
-func (s *fakeStore) Get(obj interface{}) (item interface{}, exists bool, err error) {
+func (s *dummyStore) ListKeys() []string {
+	return nil
+}
+
+func (s *dummyStore) Get(obj interface{}) (item interface{}, exists bool, err error) {
 	return nil, false, nil
 }
 
-func (s *fakeStore) GetByKey(key string) (item interface{}, exists bool, err error) {
+func (s *dummyStore) GetByKey(key string) (item interface{}, exists bool, err error) {
 	return nil, false, nil
 }
 
-func (s *fakeStore) Replace(list []interface{}, _ string) error {
+func (s *dummyStore) Replace(list []interface{}, _ string) error {
 	return nil
 }
 
-func (s *fakeStore) Resync() error {
+func (s *dummyStore) Resync() error {
 	return nil
 }
